@@ -4,15 +4,33 @@ Interactive dashboard to visualize and filter job application history. Search by
 
 ## Architecture
 
-```
-CVs enviados.txt → Python Parser → data.json → S3 + CloudFront → Mobile Web App
+```mermaid
+graph LR
+    A[CVs enviados.txt] --> B[Python Parser]
+    B --> C[data.json]
+    C --> D[S3 Bucket]
+    D --> E[CloudFront CDN]
+    E --> F[Mobile Web App]
+    F --> G[Filters + Voice Search]
+    G --> H[Dashboard + Charts]
 ```
 
 - **Parser:** Python script converts the notepad file into structured JSON
-- **Frontend:** HTML + CSS + vanilla JS + Chart.js (static site)
-- **Voice:** Native Web Speech API (Chrome/Android)
+- **Frontend:** HTML + CSS + vanilla JS + Chart.js (static site, mobile-first)
+- **Voice:** Native Web Speech API (Chrome/Android, es-AR)
 - **Infrastructure:** S3 static website + CloudFront (HTTPS)
-- **Filtering:** 100% client-side, no backend required
+- **Filtering:** 100% client-side, instant, no backend required
+
+## Features
+
+- Filter by company, position, status, and date range (all combinable)
+- Voice search via microphone button (Chrome/Android)
+- Metrics: total applications, rejected, favorites, pending, rejection rate
+- Bar chart: applications per month
+- Doughnut chart: distribution by status
+- Top 10 companies with most interactions
+- Clickable company list for quick filtering
+- Responsive design optimized for mobile
 
 ## Local Development Setup
 
@@ -37,7 +55,7 @@ pip install -r requirements-dev.txt
 ### Running the Parser
 
 ```bash
-python src/parser/parser.py
+python -m src.parser.parser
 ```
 
 Generates `src/frontend/data.json` from `docs/CVs enviados.txt`.
@@ -66,15 +84,21 @@ ruff check .
 
 ### Deployment
 
-```bash
-bash infra/deploy.sh
+```powershell
+powershell -ExecutionPolicy Bypass -File infra/deploy.ps1
 ```
+
+The deploy script is idempotent (safe to run multiple times). It will:
+1. Create/verify the S3 bucket
+2. Upload frontend files with correct content-types
+3. Create or invalidate CloudFront distribution
+4. Print the final URL
 
 ## Updating Data
 
 1. Edit `docs/CVs enviados.txt` with new applications
-2. Run the parser: `python src/parser/parser.py`
-3. Re-deploy: `bash infra/deploy.sh`
+2. Run the parser: `python -m src.parser.parser`
+3. Re-deploy: `powershell -ExecutionPolicy Bypass -File infra/deploy.ps1`
 
 ## License
 
