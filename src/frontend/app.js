@@ -364,6 +364,7 @@ function renderApplicationsList() {
           <span class="app-item-date">${formatDate(app.date)}</span>
           ${app.rejection_date ? `<span>Rech: ${formatDate(app.rejection_date)}</span>` : ""}
         </div>
+        ${app.channel ? `<div class="app-item-channel">${escapeHtml(app.channel)}</div>` : ""}
       </div>
     `
     )

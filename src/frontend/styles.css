@@ -415,6 +415,13 @@ body {
   font-weight: 500;
 }
 
+.app-item-channel {
+  font-size: 0.65rem;
+  color: var(--accent);
+  margin-top: 0.2rem;
+  font-style: italic;
+}
+
 /* Toast */
 .toast {
   position: fixed;
