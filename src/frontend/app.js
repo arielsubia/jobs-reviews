@@ -429,3 +429,83 @@ function showToast(message, duration = 3000) {
     toast.classList.remove("show");
   }, duration);
 }
+
+
+// ============================================================
+// Voice Search (Web Speech API)
+// ============================================================
+
+/**
+ * Initialize voice search if supported by the browser.
+ */
+function initVoiceSearch() {
+  const btnVoice = document.getElementById("btn-voice");
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    // Browser doesn't support Speech API — hide the button
+    btnVoice.style.display = "none";
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
+  recognition.lang = "es-AR";
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  let isListening = false;
+
+  btnVoice.addEventListener("click", () => {
+    if (isListening) {
+      recognition.stop();
+      return;
+    }
+
+    try {
+      recognition.start();
+    } catch (error) {
+      showToast("Error al iniciar reconocimiento de voz");
+    }
+  });
+
+  recognition.addEventListener("start", () => {
+    isListening = true;
+    btnVoice.classList.add("listening");
+    btnVoice.setAttribute("aria-label", "Escuchando... toca para detener");
+  });
+
+  recognition.addEventListener("end", () => {
+    isListening = false;
+    btnVoice.classList.remove("listening");
+    btnVoice.setAttribute("aria-label", "Búsqueda por voz");
+  });
+
+  recognition.addEventListener("result", (event) => {
+    const transcript = event.results[0][0].transcript.trim();
+    if (transcript) {
+      filterCompany.value = transcript;
+      applyFilters();
+      showToast(`Búsqueda: "${transcript}"`);
+    }
+  });
+
+  recognition.addEventListener("error", (event) => {
+    isListening = false;
+    btnVoice.classList.remove("listening");
+    btnVoice.setAttribute("aria-label", "Búsqueda por voz");
+
+    const errorMessages = {
+      "not-allowed": "Permiso de micrófono denegado",
+      "no-speech": "No se detectó voz. Intentá de nuevo",
+      "audio-capture": "No se encontró micrófono",
+      "network": "Error de red para reconocimiento de voz",
+    };
+
+    const message = errorMessages[event.error] || "Error de reconocimiento de voz";
+    showToast(message);
+  });
+}
+
+// Initialize voice search after DOM is ready
+document.addEventListener("DOMContentLoaded", initVoiceSearch);
