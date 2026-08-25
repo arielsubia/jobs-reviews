@@ -30,6 +30,7 @@ node_modules/
 
 # Source data (private)
 docs/CVs enviados.txt
+src/frontend/data.json
 
 # Deploy state
 infra/.cloudfront-id
