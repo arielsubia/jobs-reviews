@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jobs Reviews Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="header">
+    <div class="header-content">
+      <img src="assets/logo-phildev.png" alt="Phil Dev" class="logo" width="32" height="32">
+      <h1 class="header-title">Jobs Reviews</h1>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- Filters Section -->
+    <section class="filters" aria-label="Filtros de búsqueda">
+      <div class="filter-row">
+        <div class="input-group input-group--with-mic">
+          <input
+            type="text"
+            id="filter-company"
+            class="input"
+            placeholder="Buscar empresa..."
+            aria-label="Filtrar por empresa"
+          >
+          <button
+            id="btn-voice"
+            class="btn-mic"
+            aria-label="Búsqueda por voz"
+            title="Búsqueda por voz"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </button>
+        </div>
+        <div class="input-group">
+          <input
+            type="text"
+            id="filter-position"
+            class="input"
+            placeholder="Buscar puesto..."
+            aria-label="Filtrar por puesto"
+          >
+        </div>
+      </div>
+
+      <div class="filter-row">
+        <div class="input-group">
+          <select id="filter-status" class="input" aria-label="Filtrar por estado">
+            <option value="all">Todos los estados</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="rechazada">Rechazada</option>
+            <option value="favorita">Favorita</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <input
+            type="date"
+            id="filter-date-from"
+            class="input"
+            aria-label="Fecha desde"
+          >
+        </div>
+        <div class="input-group">
+          <input
+            type="date"
+            id="filter-date-to"
+            class="input"
+            aria-label="Fecha hasta"
+          >
+        </div>
+      </div>
+
+      <div class="filter-actions">
+        <button id="btn-clear" class="btn btn--secondary">Limpiar filtros</button>
+        <span id="result-count" class="result-count">0 postulaciones</span>
+      </div>
+    </section>
+
+    <!-- Metrics Section -->
+    <section class="metrics" aria-label="Métricas resumen">
+      <div class="metric-card">
+        <span class="metric-value" id="metric-total">0</span>
+        <span class="metric-label">Total</span>
+      </div>
+      <div class="metric-card metric-card--pending">
+        <span class="metric-value" id="metric-pending">0</span>
+        <span class="metric-label">Pendientes</span>
+      </div>
+      <div class="metric-card metric-card--rejected">
+        <span class="metric-value" id="metric-rejected">0</span>
+        <span class="metric-label">Rechazadas</span>
+      </div>
+      <div class="metric-card metric-card--favorite">
+        <span class="metric-value" id="metric-favorites">0</span>
+        <span class="metric-label">Favoritas</span>
+      </div>
+      <div class="metric-card metric-card--rate">
+        <span class="metric-value" id="metric-rate">0%</span>
+        <span class="metric-label">Tasa rechazo</span>
+      </div>
+    </section>
+
+    <!-- Charts Section -->
+    <section class="charts" aria-label="Gráficos">
+      <div class="chart-container">
+        <h2 class="chart-title">Postulaciones por mes</h2>
+        <canvas id="chart-monthly" aria-label="Gráfico de postulaciones por mes"></canvas>
+      </div>
+      <div class="chart-container chart-container--small">
+        <h2 class="chart-title">Distribución por estado</h2>
+        <canvas id="chart-status" aria-label="Gráfico de distribución por estado"></canvas>
+      </div>
+    </section>
+
+    <!-- Top Companies (shown when no filter is active) -->
+    <section class="top-companies" id="top-companies" aria-label="Empresas con más interacciones">
+      <h2 class="section-title">Top 10 empresas</h2>
+      <div id="top-companies-list" class="top-list"></div>
+    </section>
+
+    <!-- Applications List -->
+    <section class="applications" aria-label="Lista de postulaciones">
+      <h2 class="section-title">Detalle de postulaciones</h2>
+      <div id="applications-list" class="app-list"></div>
+    </section>
+  </main>
+
+  <!-- Toast for notifications -->
+  <div id="toast" class="toast" role="alert" aria-live="polite"></div>
+
+  <footer class="footer">
+    <img src="assets/logo-phildev.png" alt="Phil Dev" class="footer-logo" width="32" height="32">
+    <span class="footer-text">Phil Dev</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
