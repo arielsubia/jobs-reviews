@@ -357,6 +357,7 @@ function renderApplicationsList() {
       <div class="app-item app-item--${app.status}">
         <div class="app-item-header">
           <span class="app-item-position" title="${escapeHtml(app.position)}">${escapeHtml(app.position)}</span>
+          ${hasDetails(app) ? `<button class="btn-expand" aria-label="Ver detalles" onclick="toggleDetails(this)">▼</button>` : ""}
           <span class="app-item-badge badge--${app.status}">${statusLabel(app.status)}</span>
         </div>
         <div class="app-item-details">
@@ -365,6 +366,14 @@ function renderApplicationsList() {
           ${app.rejection_date ? `<span>Rech: ${formatDate(app.rejection_date)}</span>` : ""}
         </div>
         ${app.channel ? `<div class="app-item-channel">${escapeHtml(app.channel)}</div>` : ""}
+        ${hasDetails(app) ? `
+        <div class="app-item-expand" hidden>
+          ${app.salary ? `<div class="app-item-salary">Remuneración: <strong>${escapeHtml(app.salary)}</strong></div>` : ""}
+          ${app.notes && app.notes.length > 0 ? `
+          <div class="app-item-notes">
+            ${app.notes.map((n) => `<div class="app-item-note">${escapeHtml(n)}</div>`).join("")}
+          </div>` : ""}
+        </div>` : ""}
       </div>
     `
     )
@@ -510,3 +519,29 @@ function initVoiceSearch() {
 
 // Initialize voice search after DOM is ready
 document.addEventListener("DOMContentLoaded", initVoiceSearch);
+
+
+// ============================================================
+// Expandable Details Panel
+// ============================================================
+
+/**
+ * Check if an application has expandable details (salary or notes).
+ */
+function hasDetails(app) {
+  return !!(app.salary || (app.notes && app.notes.length > 0));
+}
+
+/**
+ * Toggle the expandable details panel for an application item.
+ */
+function toggleDetails(btn) {
+  const item = btn.closest(".app-item");
+  const panel = item.querySelector(".app-item-expand");
+  if (!panel) return;
+
+  const isHidden = panel.hidden;
+  panel.hidden = !isHidden;
+  btn.textContent = isHidden ? "▲" : "▼";
+  btn.setAttribute("aria-label", isHidden ? "Ocultar detalles" : "Ver detalles");
+}

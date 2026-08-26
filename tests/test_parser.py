@@ -7,8 +7,11 @@ from src.parser.parser import (
     convert_date_to_iso,
     extract_channel,
     extract_rejection,
+    extract_salary,
+    is_note_line,
+    is_orphan_continuation,
+    parse_application_line,
     parse_file,
-    parse_line,
     parse_position_and_company,
 )
 
@@ -83,6 +86,50 @@ class TestExtractChannel:
         channel = extract_channel(line)
         assert channel is None
 
+    def test_channel_with_salary_after(self) -> None:
+        line = "Data Engineer - KPMG - mediante Expo Bumeran Online 2026 - $1500000"
+        channel = extract_channel(line)
+        assert channel is not None
+        assert "Expo Bumeran Online 2026" in channel
+        assert "$" not in channel
+
+
+class TestExtractSalary:
+    def test_basic_salary(self) -> None:
+        line = "Data Engineer - KPMG - mediante Bumeran - $1500000"
+        salary = extract_salary(line)
+        assert salary == "$1500000"
+
+    def test_salary_with_dots(self) -> None:
+        line = "Data Engineer - Telecom - $2.500.000"
+        salary = extract_salary(line)
+        assert salary == "$2.500.000"
+
+    def test_salary_with_usd(self) -> None:
+        line = "Data Engineer - Globant - $2800 USD"
+        salary = extract_salary(line)
+        assert salary == "$2800 USD"
+
+    def test_no_salary(self) -> None:
+        line = "Data Engineer - Telecom"
+        salary = extract_salary(line)
+        assert salary is None
+
+
+class TestNoteDetection:
+    def test_is_note_line(self) -> None:
+        assert is_note_line("** ¿Por qué te interesa?") is True
+        assert is_note_line("**Nota sin espacio") is True
+        assert is_note_line("Data Engineer - Telecom") is False
+        assert is_note_line("") is False
+
+    def test_orphan_continuation(self) -> None:
+        assert is_orphan_continuation("continuación del texto") is True
+        assert is_orphan_continuation("Data Engineer - Telecom") is False
+        assert is_orphan_continuation("24/06/2026") is False
+        assert is_orphan_continuation("** nota") is False
+        assert is_orphan_continuation("") is False
+
 
 class TestCleanLine:
     def test_removes_rejection(self) -> None:
@@ -102,6 +149,12 @@ class TestCleanLine:
         cleaned = clean_line_for_parsing(line)
         assert "Bumeran" not in cleaned
         assert "Workia Solutions" in cleaned
+
+    def test_removes_salary(self) -> None:
+        line = "Data Engineer - KPMG - mediante Bumeran - $1500000"
+        cleaned = clean_line_for_parsing(line)
+        assert "$" not in cleaned
+        assert "1500000" not in cleaned
 
 
 class TestParsePositionAndCompany:
@@ -123,17 +176,18 @@ class TestParsePositionAndCompany:
         assert company == "Desconocida"
 
 
-class TestParseLine:
+class TestParseApplicationLine:
     def test_basic_line(self) -> None:
-        app = parse_line("Data Engineer - Telecom", "2025-06-07")
+        app = parse_application_line("Data Engineer - Telecom", "2025-06-07")
         assert app is not None
         assert app.position == "Data Engineer"
         assert app.company == "Telecom"
         assert app.status == "pendiente"
         assert app.channel is None
+        assert app.salary is None
 
     def test_rejected_line(self) -> None:
-        app = parse_line(
+        app = parse_application_line(
             "Data Scientist - Despegar - RECHAZADA el 29/04/2025", "2025-03-19"
         )
         assert app is not None
@@ -141,7 +195,7 @@ class TestParseLine:
         assert app.rejection_date == "2025-04-29"
 
     def test_favorite_line(self) -> None:
-        app = parse_line(
+        app = parse_application_line(
             "Data Engineer - Epidata - MARCADA COMO FAVORITA", "2025-05-30"
         )
         assert app is not None
@@ -149,23 +203,32 @@ class TestParseLine:
         assert app.is_favorite is True
 
     def test_with_channel(self) -> None:
-        app = parse_line(
+        app = parse_application_line(
             "Data Engineer - Workia Solutions - Mediante Bumeran", "2025-06-15"
         )
         assert app is not None
         assert app.channel is not None
         assert "Bumeran" in app.channel
 
+    def test_with_salary(self) -> None:
+        app = parse_application_line(
+            "Data Engineer - KPMG - mediante Bumeran - $1500000", "2026-08-22"
+        )
+        assert app is not None
+        assert app.salary == "$1500000"
+        assert app.channel is not None
+        assert "Bumeran" in app.channel
+
     def test_empty_line(self) -> None:
-        app = parse_line("", "2025-01-01")
+        app = parse_application_line("", "2025-01-01")
         assert app is None
 
     def test_date_line_skipped(self) -> None:
-        app = parse_line("24/06/2026", "2026-06-24")
+        app = parse_application_line("24/06/2026", "2026-06-24")
         assert app is None
 
     def test_date_with_trailing_dash(self) -> None:
-        app = parse_line("08/10/2024 - ", "2024-10-08")
+        app = parse_application_line("08/10/2024 - ", "2024-10-08")
         assert app is None
 
 
@@ -176,7 +239,7 @@ class TestParseFile:
             return  # Skip if file not available
 
         applications = parse_file(input_file)
-        assert len(applications) > 400  # We expect 500+ records
+        assert len(applications) > 400
 
         # Verify some known records exist
         companies = [app.company for app in applications]
@@ -193,6 +256,10 @@ class TestParseFile:
             assert len(app.date) == 10
             assert app.date[4] == "-"
             assert app.date[7] == "-"
+
+        # Verify salary extraction works on known records
+        salary_apps = [a for a in applications if a.salary]
+        assert len(salary_apps) > 0
 
     def test_parse_sample_content(self, tmp_path: Path) -> None:
         sample = """09/09/2024
@@ -221,3 +288,42 @@ Data Engineer Jr. - Google Cloud Academy - Argentina
         assert applications[2].date == "2024-10-14"
         assert applications[2].position == "Data Engineer"
         assert applications[2].company == "Prex Argentina Remote"
+
+    def test_parse_notes(self, tmp_path: Path) -> None:
+        sample = """25/08/2026
+Data Engineer - Telecom - $2500000
+** ¿Por qué te interesa? Me apasiona el procesamiento de datos
+** ¿Disponibilidad? Sí, inmediata
+
+Analista de Datos - YPF
+"""
+        sample_file = tmp_path / "sample.txt"
+        sample_file.write_text(sample, encoding="utf-8")
+
+        applications = parse_file(sample_file)
+        assert len(applications) == 2
+
+        assert applications[0].salary == "$2500000"
+        assert len(applications[0].notes) == 2
+        assert "Me apasiona" in applications[0].notes[0]
+        assert "inmediata" in applications[0].notes[1]
+
+        assert applications[1].notes == []
+        assert applications[1].salary is None
+
+    def test_parse_notes_with_continuation(self, tmp_path: Path) -> None:
+        sample = """25/08/2026
+Data Engineer - Telecom
+** ¿Por qué te interesa? Me apasiona el procesamiento
+de datos a escala y la arquitectura cloud
+** ¿Disponibilidad? Sí
+"""
+        sample_file = tmp_path / "sample.txt"
+        sample_file.write_text(sample, encoding="utf-8")
+
+        applications = parse_file(sample_file)
+        assert len(applications) == 1
+
+        assert len(applications[0].notes) == 2
+        assert "de datos a escala" in applications[0].notes[0]
+        assert applications[0].notes[1] == "¿Disponibilidad? Sí"

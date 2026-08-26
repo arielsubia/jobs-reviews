@@ -2,7 +2,7 @@
 
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from src.parser.config import INPUT_FILE, OUTPUT_FILE
@@ -24,18 +24,24 @@ REJECTION_PATTERNS = [
 
 FAVORITE_PATTERN = re.compile(r"MARCADA COMO FAVORITA", re.IGNORECASE)
 
+SALARY_PATTERN = re.compile(r"\$\s*([\d.,]+(?:\s*(?:USD|ARS|usd|ars))?)")
+
+NOTE_PREFIX = "**"
+
 CHANNEL_PATTERNS = [
-    re.compile(r"[-–]\s*(?:M|m)ediante\s+(.+?)(?:\s*[-–]\s*(?:RECHAZ|MARCADA)|$)"),
-    re.compile(r"[-–]\s*(?:E|e)nviado\s+(.+?)(?:\s*[-–]\s*(?:RECHAZ|MARCADA)|$)"),
-    re.compile(r"[-–]\s*(?:V|v)(?:ia|ía)\s+(.+?)(?:\s*[-–]\s*(?:RECHAZ|MARCADA)|$)"),
+    re.compile(r"[-–]\s*(?:M|m)ediante\s+(.+?)(?:\s*[-–]\s*(?:RECHAZ|MARCADA|\$)|$)"),
+    re.compile(r"[-–]\s*(?:E|e)nviado\s+(.+?)(?:\s*[-–]\s*(?:RECHAZ|MARCADA|\$)|$)"),
     re.compile(
-        r"[-–]\s*(?:A|a)\s+trav[eé]s\s+de\s+(.+?)(?:\s*[-–]\s*(?:RECHAZ|MARCADA)|$)"
+        r"[-–]\s*(?:V|v)(?:ia|ía)\s+(.+?)(?:\s*[-–]\s*(?:RECHAZ|MARCADA|\$)|$)"
     ),
-    re.compile(r"[Mm]ediante\s+(.+?)(?:\s*[-–]\s*(?:RECHAZ|MARCADA)|$)"),
-    re.compile(r"[Ee]nviado\s+(.+?)(?:\s*[-–]\s*(?:RECHAZ|MARCADA)|$)"),
-    re.compile(r"[Vv](?:ia|ía)\s+(.+?)(?:\s*[-–]\s*(?:RECHAZ|MARCADA)|$)"),
     re.compile(
-        r"[Aa]\s+trav[eé]s\s+de\s+(.+?)(?:\s*[-–]\s*(?:RECHAZ|MARCADA)|$)"
+        r"[-–]\s*(?:A|a)\s+trav[eé]s\s+de\s+(.+?)(?:\s*[-–]\s*(?:RECHAZ|MARCADA|\$)|$)"
+    ),
+    re.compile(r"[Mm]ediante\s+(.+?)(?:\s*[-–]\s*(?:RECHAZ|MARCADA|\$)|$)"),
+    re.compile(r"[Ee]nviado\s+(.+?)(?:\s*[-–]\s*(?:RECHAZ|MARCADA|\$)|$)"),
+    re.compile(r"[Vv](?:ia|ía)\s+(.+?)(?:\s*[-–]\s*(?:RECHAZ|MARCADA|\$)|$)"),
+    re.compile(
+        r"[Aa]\s+trav[eé]s\s+de\s+(.+?)(?:\s*[-–]\s*(?:RECHAZ|MARCADA|\$)|$)"
     ),
 ]
 
@@ -51,7 +57,9 @@ class JobApplication:
     status: str
     rejection_date: str | None
     is_favorite: bool
-    raw_line: str
+    salary: str | None
+    notes: list[str] = field(default_factory=list)
+    raw_line: str = ""
 
 
 def convert_date_to_iso(date_str: str) -> str:
@@ -82,7 +90,7 @@ def extract_channel(line: str) -> str | None:
             channel = match.group(1).strip()
             # Clean trailing punctuation and status markers
             channel = re.sub(
-                r"\s*[-–]?\s*(?:RECHAZ|MARCADA).*$", "", channel, flags=re.IGNORECASE
+                r"\s*[-–]?\s*(?:RECHAZ|MARCADA|\$).*$", "", channel, flags=re.IGNORECASE
             )
             channel = channel.rstrip(" .-–")
             if channel:
@@ -90,9 +98,20 @@ def extract_channel(line: str) -> str | None:
     return None
 
 
+def extract_salary(line: str) -> str | None:
+    """Extract salary/remuneration from a line."""
+    match = SALARY_PATTERN.search(line)
+    if match:
+        return "$" + match.group(1).strip()
+    return None
+
+
 def clean_line_for_parsing(line: str) -> str:
-    """Remove status markers and channel info to isolate position and company."""
+    """Remove status markers, channel info, and salary to isolate position and company."""
     cleaned = line
+
+    # Remove salary
+    cleaned = SALARY_PATTERN.sub("", cleaned)
 
     # Remove rejection markers with dates
     for pattern in REJECTION_PATTERNS:
@@ -145,7 +164,33 @@ def parse_position_and_company(cleaned_line: str) -> tuple[str, str]:
     return cleaned_line.strip(), "Desconocida"
 
 
-def parse_line(line: str, current_date: str) -> JobApplication | None:
+def is_note_line(line: str) -> bool:
+    """Check if a line is a note (starts with **)."""
+    return line.strip().startswith(NOTE_PREFIX)
+
+
+def is_orphan_continuation(line: str) -> bool:
+    """Check if a line is an orphan continuation of a previous note.
+
+    An orphan line is one that:
+    - Is not empty
+    - Is not a date line
+    - Does not contain ' - ' (position/company separator)
+    - Does not start with **
+    """
+    stripped = line.strip()
+    if not stripped:
+        return False
+    if DATE_PATTERN.match(stripped):
+        return False
+    if stripped.startswith(NOTE_PREFIX):
+        return False
+    if " - " in stripped:
+        return False
+    return True
+
+
+def parse_application_line(line: str, current_date: str) -> JobApplication | None:
     """Parse a single application line into a JobApplication."""
     stripped = line.strip()
 
@@ -170,6 +215,9 @@ def parse_line(line: str, current_date: str) -> JobApplication | None:
     # Extract channel
     channel = extract_channel(stripped)
 
+    # Extract salary
+    salary = extract_salary(stripped)
+
     # Clean line and extract position/company
     cleaned = clean_line_for_parsing(stripped)
     position, company = parse_position_and_company(cleaned)
@@ -186,6 +234,8 @@ def parse_line(line: str, current_date: str) -> JobApplication | None:
         status=status,
         rejection_date=rejection_date,
         is_favorite=is_favorite,
+        salary=salary,
+        notes=[],
         raw_line=stripped,
     )
 
@@ -194,6 +244,8 @@ def parse_file(file_path: Path) -> list[JobApplication]:
     """Parse the entire notepad file into a list of JobApplications."""
     applications: list[JobApplication] = []
     current_date = ""
+    last_app: JobApplication | None = None
+    last_had_note = False
 
     with open(file_path, "r", encoding="utf-8") as f:
         for line in f:
@@ -203,16 +255,41 @@ def parse_file(file_path: Path) -> list[JobApplication]:
             date_match = DATE_PATTERN.match(stripped)
             if date_match:
                 current_date = convert_date_to_iso(date_match.group(1))
+                last_app = None
+                last_had_note = False
                 continue
 
             # Skip if no date context yet
             if not current_date:
                 continue
 
+            # Check if this is a note line (starts with **)
+            if is_note_line(stripped):
+                if last_app:
+                    note_text = stripped[len(NOTE_PREFIX):].strip()
+                    if note_text:
+                        last_app.notes.append(note_text)
+                    last_had_note = True
+                continue
+
+            # Check if this is an orphan continuation of a note
+            if last_had_note and is_orphan_continuation(stripped):
+                if last_app and last_app.notes:
+                    last_app.notes[-1] += " " + stripped
+                continue
+
+            # Reset note tracking for new application lines
+            last_had_note = False
+
+            # Skip empty lines
+            if not stripped:
+                continue
+
             # Try to parse as application
-            app = parse_line(line, current_date)
+            app = parse_application_line(line, current_date)
             if app:
                 applications.append(app)
+                last_app = app
 
     return applications
 
@@ -241,9 +318,13 @@ def main() -> None:
     rejected = sum(1 for a in applications if a.status == "rechazada")
     favorites = sum(1 for a in applications if a.status == "favorita")
     pending = sum(1 for a in applications if a.status == "pendiente")
+    with_salary = sum(1 for a in applications if a.salary)
+    with_notes = sum(1 for a in applications if a.notes)
     print(f"  Rejected: {rejected}")
     print(f"  Favorites: {favorites}")
     print(f"  Pending: {pending}")
+    print(f"  With salary: {with_salary}")
+    print(f"  With notes: {with_notes}")
 
 
 if __name__ == "__main__":
